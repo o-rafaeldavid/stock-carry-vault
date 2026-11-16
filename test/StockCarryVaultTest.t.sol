@@ -130,4 +130,19 @@ contract StockCarryVaultTest is Test {
         vm.expectRevert(StockCarryVault.BadParams.selector);
         vault.setParams(p_emergencyLiquidation);
     }
+
+    function test_wrongReserveReverts() public {
+        vm.expectRevert(StockCarryVault.WrongReserve.selector);
+        new StockCarryVault(
+            IERC20(NVDAc),
+            ISpoke(SPOKE),
+            IPool(POOL_V3),
+            IERC20(USDC),
+            IERC20(aBasUSDC),
+            USDC_ID, // <- error (not NVDAc_ID)
+            USDC_ID,
+            address(this),
+            keeper
+        );
+    }
 }
