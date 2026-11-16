@@ -7,6 +7,24 @@ pragma solidity ^0.8.13;
 /// @notice Full interface: https://github.com/aave/aave-v4/blob/main/src/spoke/interfaces/ISpoke.sol
 
 interface ISpoke {
+    /// @notice User account data describing a user position and its health.
+    /// @dev riskPremium The risk premium of the user position, expressed in BPS.
+    /// @dev avgCollateralFactor The weighted average collateral factor of the user position, expressed in WAD.
+    /// @dev healthFactor The health factor of the user position, expressed in WAD. 1e18 represents a health factor of 1.00.
+    /// @dev totalCollateralValue The total collateral value of the user position, expressed in units of Value.
+    /// @dev totalDebtValueRay The total debt value of the user position, expressed in units of Value and scaled by RAY.
+    /// @dev activeCollateralCount The number of active collaterals, which includes reserves with `collateralFactor` > 0, `enabledAsCollateral` and `suppliedAmount` > 0.
+    /// @dev borrowCount The number of borrowed reserves of the user position.
+    struct UserAccountData {
+        uint256 riskPremium;
+        uint256 avgCollateralFactor;
+        uint256 healthFactor;
+        uint256 totalCollateralValue;
+        uint256 totalDebtValueRay;
+        uint256 activeCollateralCount;
+        uint256 borrowCount;
+    }
+
     /// @notice Supplies an amount of underlying asset of the specified reserve.
     /// @dev It reverts if the reserve associated with the given reserve identifier is not listed.
     /// @dev The Spoke pulls the underlying asset from the caller, so prior token approval is required.
@@ -82,6 +100,16 @@ interface ISpoke {
         bool usingAsCollateral,
         address onBehalfOf
     ) external;
+
+    /// @notice Returns the amount of assets supplied by a specific user for a given reserve.
+    /// @dev It reverts if the reserve associated with the given reserve identifier is not listed.
+    /// @param reserveId The identifier of the reserve.
+    /// @param user The address of the user.
+    /// @return The amount of assets supplied by the user.
+    function getUserSuppliedAssets(
+        uint256 reserveId,
+        address user
+    ) external view returns (uint256);
 
     /// @notice Returns the total debt of a specific user for a given reserve.
     /// @dev It reverts if the reserve associated with the given reserve identifier is not listed.
