@@ -22,7 +22,7 @@ interface ISpoke {
         uint16 assetId;
         uint8 decimals;
         uint24 collateralRisk;
-        uin8 flags; // originally ReserveFlags
+        uint8 flags; // originally ReserveFlags
         uint32 dynamicConfigKey;
     }
 
