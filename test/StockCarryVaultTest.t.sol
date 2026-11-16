@@ -148,12 +148,25 @@ contract StockCarryVaultTest is Test {
     }
 
     function test_totalAssets_matchesPosition() public {
-        vm.prank(NVDAc_WHALE);
-        IERC20(NVDAc).transfer(address(vault), AMOUNT);
+        _openPositionAsVault();
+        assertApproxEqAbs(vault.totalAssets(), AMOUNT, 10);
+    }
 
-        _supplyAsCollateral();
-        uint256 usdcAmount = _borrowTarget();
-        _parkInV3Pool(usdcAmount);
+    function test_totalAssets_after30d() public {
+        _openPositionAsVault();
+        uint256 before = vault.totalAssets();
+        vm.warp(block.timestamp + 30 days);
+        uint256 afterW = vault.totalAssets();
+
+        console.log("stpNVDA before", before);
+        console.log("stpNVDA after ", afterW);
+        int256 diff = int256(afterW) - int256(before);
+        int256 ppm = (diff * 1e6) / int256(before);
+        int256 aprBps = (diff * 10_000 * 365) / (30 * int256(before));
+
+        console.log("diff (wei NVDAc)", diff);
+        console.log("change ppm", ppm);
+        console.log("APR bps", aprBps);
     }
 
     // ------
@@ -166,6 +179,15 @@ contract StockCarryVaultTest is Test {
     // ------
     // Flow
     // ------
+
+    function _openPositionAsVault() internal {
+        vm.prank(NVDAc_WHALE);
+        IERC20(NVDAc).transfer(address(vault), AMOUNT);
+
+        _supplyAsCollateral();
+        uint256 usdcAmount = _borrowTarget();
+        _parkInV3Pool(usdcAmount);
+    }
 
     function _supplyAsCollateral() internal {
         vm.startPrank(address(vault));
