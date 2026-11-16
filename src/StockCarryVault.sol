@@ -33,30 +33,66 @@ contract StockCarryVault is ERC4626, Ownable2Step {
 
     // errors and events
     error NotKeeper();
-    error NotOwner();
     error BadParams();
     error WrongReserve();
     event KeeperSet(address keeper);
     event ParamsSet(Params p);
 
     constructor(
-        asset,
-        spoke,
-        poolV3,
-        usdc,
-        aUsdc,
-        ids,
-        owner,
-        keeper
+        IERC20 _asset,
+        ISpoke _spoke,
+        IPool _poolV3,
+        IERC20 _usdc,
+        IERC20 _aUsdc,
+        uint256 _collateralId,
+        uint256 _debtId,
+        address _owner,
+        address _keeper
     )
         ERC20("Staked NVDA (personal)", "stpNVDA")
-        ERC4626(asset)
-        Ownable(owner)
-    {}
+        ERC4626(_asset)
+        Ownable(_owner)
+    {
+        spoke = _spoke;
+        poolV3 = _poolV3;
+        usdc = _usdc;
+        aUsdc = _aUsdc;
+        collateralId = _collateralId;
+        debtId = _debtId;
+        keeper = _keeper;
 
-    modifier onlyKeeperOrOwner() {}
+        emit KeeperSet(_keeper);
+
+        if (_spoke.getReserve(_collateralId).underlying != address(_asset)) {
+            revert WrongReserve();
+        }
+        if (_spoke.getReserve(_debtId).underlying != address(_usdc)) {
+            revert WrongReserve();
+        }
+
+        _setParams(Params(2500, 1900, 3200, 4500));
+    }
+
+    modifier onlyKeeperOrOwner() {
+        if (msg.sender != keeper && msg.sender != owner()) {
+            revert NotKeeper();
+        }
+        _;
+    }
 
     function setKeeper(address k) external onlyOwner {}
 
-    function setParams(Params calldata p) external onlyOwner {}
+    function _setParams(Params memory p) internal {
+        bool ok = p.lowerBps < p.targetBps &&
+            p.targetBps < p.upperBps &&
+            p.upperBps < p.emergencyBps &&
+            p.emergencyBps < 7000;
+        if (!ok) {
+            revert BadParams();
+        }
+        params = p;
+    }
+    function setParams(Params calldata p) external onlyOwner {
+        _setParams(p);
+    }
 }

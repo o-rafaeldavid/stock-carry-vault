@@ -18,11 +18,11 @@ interface ISpoke {
     struct Reserve {
         address underlying;
         //
-        IHubBase hub;
+        address hub; // originally IHubBase
         uint16 assetId;
         uint8 decimals;
         uint24 collateralRisk;
-        ReserveFlags flags;
+        uin8 flags; // originally ReserveFlags
         uint32 dynamicConfigKey;
     }
 
@@ -105,6 +105,10 @@ interface ISpoke {
         uint256 amount,
         address onBehalfOf
     ) external returns (uint256, uint256);
+
+    function getReserve(
+        uint256 reserveId
+    ) external view returns (Reserve memory);
 
     /// @notice Allows suppliers to enable/disable a specific supplied reserve as collateral.
     /// @dev It reverts if the reserve associated with the given reserve identifier is not listed.
