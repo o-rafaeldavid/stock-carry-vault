@@ -7,6 +7,25 @@ pragma solidity ^0.8.13;
 /// @notice Full interface: https://github.com/aave/aave-v4/blob/main/src/spoke/interfaces/ISpoke.sol
 
 interface ISpoke {
+    /// @notice Reserve level data.
+    /// @dev underlying The address of the underlying asset.
+    /// @dev hub The address of the associated Hub.
+    /// @dev assetId The identifier of the asset in the Hub.
+    /// @dev decimals The number of decimals of the underlying asset.
+    /// @dev collateralRisk The risk associated with a collateral asset, expressed in BPS.
+    /// @dev flags The packed boolean flags of the reserve (a wrapped uint8).
+    /// @dev dynamicConfigKey The key of the last reserve dynamic config.
+    struct Reserve {
+        address underlying;
+        //
+        IHubBase hub;
+        uint16 assetId;
+        uint8 decimals;
+        uint24 collateralRisk;
+        ReserveFlags flags;
+        uint32 dynamicConfigKey;
+    }
+
     /// @notice User account data describing a user position and its health.
     /// @dev riskPremium The risk premium of the user position, expressed in BPS.
     /// @dev avgCollateralFactor The weighted average collateral factor of the user position, expressed in WAD.
