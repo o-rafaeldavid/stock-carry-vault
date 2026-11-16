@@ -113,9 +113,9 @@ contract StockCarryVault is ERC4626, Ownable2Step {
         oracle = IPriceOracle(_spoke.ORACLE());
         USDC_TO_ASSET_SCALE =
             10 **
-                (IERC20Metadata(_asset).decimals() /* 8 */ +
+                (IERC20Metadata(address(_asset)).decimals() /* 8 */ +
                     oracle.decimals() -
-                    IERC20Metadata(_usdc).decimals() /* 6 */);
+                    IERC20Metadata(address(_usdc)).decimals() /* 6 */);
 
         spoke = _spoke;
         poolV3 = _poolV3;

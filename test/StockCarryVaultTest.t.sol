@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, console} from "forge-std/Test.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {StockCarryVault} from "src/StockCarryVault.sol";
 import {ISpoke} from "src/interfaces/aave/ISpoke.sol";
 import {IPool} from "src/interfaces/aave/IPool.sol";
+import {IPriceOracle} from "src/interfaces/aave/IPriceOracle.sol";
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -143,6 +144,79 @@ contract StockCarryVaultTest is Test {
             USDC_ID,
             address(this),
             keeper
+        );
+    }
+
+    function test_totalAssets_matchesPosition() public {
+        vm.prank(NVDAc_WHALE);
+        IERC20(NVDAc).transfer(address(vault), AMOUNT);
+
+        _supplyAsCollateral();
+        uint256 usdcAmount = _borrowTarget();
+        _parkInV3Pool(usdcAmount);
+    }
+
+    // ------
+    // Reads
+    // ------
+    function _nvdaPrice() internal view returns (uint256) {
+        return IPriceOracle(ISpoke(SPOKE).ORACLE()).getReservePrice(NVDAc_ID);
+    }
+
+    // ------
+    // Flow
+    // ------
+
+    function _supplyAsCollateral() internal {
+        vm.startPrank(address(vault));
+        IERC20(NVDAc).approve(SPOKE, AMOUNT);
+        (uint256 shares, uint256 assets) = ISpoke(SPOKE).supply(
+            NVDAc_ID,
+            AMOUNT,
+            address(vault)
+        );
+        ISpoke(SPOKE).setUsingAsCollateral(NVDAc_ID, true, address(vault));
+
+        console.log("supply: shares", shares, "assets", assets);
+        assertApproxEqAbs(
+            ISpoke(SPOKE).getUserSuppliedAssets(NVDAc_ID, address(vault)),
+            AMOUNT,
+            1
+        );
+        assertEq(IERC20(NVDAc).balanceOf(address(vault)), 0);
+    }
+
+    function _borrowTarget() internal returns (uint256 usdcAmount) {
+        uint256 price = _nvdaPrice();
+        uint8 dec = IPriceOracle(ISpoke(SPOKE).ORACLE()).decimals();
+        uint256 supplied = ISpoke(SPOKE).getUserSuppliedAssets(
+            NVDAc_ID,
+            address(vault)
+        );
+
+        uint256 collateralUSDC = (supplied * price) / (10 ** (8 + dec - 6));
+        usdcAmount = (collateralUSDC * TARGET_LTV_BPS) / 10_000;
+
+        console.log("NVDA price (Oracle)", price, "decimals", dec);
+        console.log("collateral in USDC", collateralUSDC);
+        console.log("to borrow", usdcAmount);
+
+        uint256 before = IERC20(USDC).balanceOf(address(vault));
+        ISpoke(SPOKE).borrow(USDC_ID, usdcAmount, address(vault));
+        assertEq(
+            IERC20(USDC).balanceOf(address(vault)) - before,
+            usdcAmount,
+            "Not enough USDC"
+        );
+    }
+
+    function _parkInV3Pool(uint256 amount) internal {
+        IERC20(USDC).approve(POOL_V3, amount);
+        IPool(POOL_V3).supply(USDC, amount, address(vault), 0);
+        assertApproxEqAbs(
+            IERC20(aBasUSDC).balanceOf(address(vault)),
+            amount,
+            2
         );
     }
 }
