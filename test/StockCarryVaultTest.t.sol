@@ -87,4 +87,47 @@ contract StockCarryVaultTest is Test {
         vm.prank(user);
         vault.setParams(p);
     }
+
+    function test_badParamsReverts() public {
+        StockCarryVault.Params memory p_lowerBig = StockCarryVault.Params({
+            targetBps: 1900,
+            lowerBps: 2500,
+            upperBps: 3200,
+            emergencyBps: 4500
+        });
+
+        StockCarryVault.Params memory p_upperLow = StockCarryVault.Params({
+            targetBps: 2500,
+            lowerBps: 1900,
+            upperBps: 0,
+            emergencyBps: 4500
+        });
+
+        StockCarryVault.Params memory p_emergencyLow = StockCarryVault.Params({
+            targetBps: 2500,
+            lowerBps: 1900,
+            upperBps: 3200,
+            emergencyBps: 0
+        });
+
+        StockCarryVault.Params memory p_emergencyLiquidation = StockCarryVault
+            .Params({
+                targetBps: 2500,
+                lowerBps: 1900,
+                upperBps: 3200,
+                emergencyBps: 7000
+            });
+
+        vm.expectRevert(StockCarryVault.BadParams.selector);
+        vault.setParams(p_lowerBig);
+
+        vm.expectRevert(StockCarryVault.BadParams.selector);
+        vault.setParams(p_upperLow);
+
+        vm.expectRevert(StockCarryVault.BadParams.selector);
+        vault.setParams(p_emergencyLow);
+
+        vm.expectRevert(StockCarryVault.BadParams.selector);
+        vault.setParams(p_emergencyLiquidation);
+    }
 }
