@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -39,6 +40,10 @@ contract StockCarryVault is ERC4626, Ownable2Step {
     uint256 public immutable collateralId;
     /// @notice Spoke reserve id of the debt asset (7 = USDC on the Coinbase Stocks spoke).
     uint256 public immutable debtId;
+
+    IPriceOracle public immutable oracle;
+
+    uint256 internal immutable USDC_TO_ASSET_SCALE;
 
     // ---------------------------------------------------------------------
     // Roles and risk parameters
@@ -100,7 +105,18 @@ contract StockCarryVault is ERC4626, Ownable2Step {
         uint256 _debtId,
         address _owner,
         address _keeper
-    ) ERC20("Staked NVDA (personal)", "stpNVDA") ERC4626(_asset) Ownable(_owner) {
+    )
+        ERC20("Staked NVDA (personal)", "stpNVDA")
+        ERC4626(_asset)
+        Ownable(_owner)
+    {
+        oracle = IPriceOracle(_spoke.ORACLE());
+        USDC_TO_ASSET_SCALE =
+            10 **
+                (IERC20Metadata(_asset).decimals() /* 8 */ +
+                    oracle.decimals() -
+                    IERC20Metadata(_usdc).decimals() /* 6 */);
+
         spoke = _spoke;
         poolV3 = _poolV3;
         usdc = _usdc;
@@ -110,10 +126,19 @@ contract StockCarryVault is ERC4626, Ownable2Step {
         keeper = _keeper;
         emit KeeperSet(_keeper);
 
-        if (_spoke.getReserve(_collateralId).underlying != address(_asset)) revert WrongReserve();
-        if (_spoke.getReserve(_debtId).underlying != address(_usdc)) revert WrongReserve();
+        if (_spoke.getReserve(_collateralId).underlying != address(_asset))
+            revert WrongReserve();
+        if (_spoke.getReserve(_debtId).underlying != address(_usdc))
+            revert WrongReserve();
 
-        _setParams(Params({targetBps: 2500, lowerBps: 1900, upperBps: 3200, emergencyBps: 4500}));
+        _setParams(
+            Params({
+                targetBps: 2500,
+                lowerBps: 1900,
+                upperBps: 3200,
+                emergencyBps: 4500
+            })
+        );
     }
 
     // ---------------------------------------------------------------------
@@ -143,10 +168,55 @@ contract StockCarryVault is ERC4626, Ownable2Step {
 
     /// @dev Validates the band order and stores it.
     function _setParams(Params memory p) internal {
-        bool ok = p.lowerBps < p.targetBps && p.targetBps < p.upperBps && p.upperBps < p.emergencyBps
-            && p.emergencyBps < 7000;
+        bool ok = p.lowerBps < p.targetBps &&
+            p.targetBps < p.upperBps &&
+            p.upperBps < p.emergencyBps &&
+            p.emergencyBps < 7000;
         if (!ok) revert BadParams();
         params = p;
         emit ParamsSet(p);
+    }
+
+    // ---------------------------------------------------------------------
+    // Accounting
+    // ---------------------------------------------------------------------
+
+    /// @return supplied NVDAc through Spoke
+    function _collateral() internal view returns (uint256) {
+        return spoke.getUserSuppliedAssets(collateralId, address(this));
+    }
+
+    /// @return all liquid USDC (in balance)
+    function _cash() internal view returns (uint256) {
+        return aUsdc.balanceOf(address(this)) + usdc.balanceOf(address(this));
+    }
+
+    /// @return USDC debt
+    function _debt() internal view returns (uint256) {
+        return spoke.getUserTotalDebt(debtId, address(this));
+    }
+
+    /// @return NVDAc price through Spoke's Oracle
+    function _price() internal view returns (uint256) {
+        return oracle.getReservePrice(collateralId);
+    }
+
+    /// @return USDC balance to NVDAc
+    function _usdcToAsset(uint256 usdcAmount) internal view returns (uint256) {
+        return (usdcAmount * USDC_TO_ASSET_SCALE) / _price();
+    }
+
+    /// @dev Aave V4 collateral + (USDC in balance - USDC debt) (all in NVDAc)
+    function totalAssets() public view override returns (uint256) {
+        uint256 collateral = _collateral();
+        uint256 cash = _cash();
+        uint256 debt = _debt();
+
+        if (cash >= debt) {
+            return collateral + _usdcToAsset(cash - debt);
+        }
+
+        uint256 deficit = _usdcToAsset(debt - cash);
+        return deficit >= collateral ? 0 : collateral - deficit;
     }
 }
